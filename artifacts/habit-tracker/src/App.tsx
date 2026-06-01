@@ -16,9 +16,8 @@ export default function App() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [tab, setTab] = useState<Tab>("today");
 
-  // Guards against concurrent seeding
+  // Guard against concurrent seeding only (fetchingRef removed — was blocking updates)
   const seedingRef = useRef(false);
-  const fetchingRef = useRef(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -69,9 +68,6 @@ export default function App() {
   }
 
   async function fetchHabits() {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
     try {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
@@ -108,8 +104,8 @@ export default function App() {
       } else {
         setHabits(fetched);
       }
-    } finally {
-      fetchingRef.current = false;
+    } catch {
+      // silently ignore transient fetch errors
     }
   }
 
