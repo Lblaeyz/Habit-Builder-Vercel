@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase, Habit, CATEGORY_COLORS, DEFAULT_HABITS } from "@/lib/supabase";
+import NotificationSettings from "@/components/NotificationSettings";
 
 type Props = {
   habits: Habit[];
@@ -184,6 +185,8 @@ export default function EditHabitsModal({ habits, onClose, onUpdate }: Props) {
             </button>
           </div>
         </div>
+
+        <NotificationSettings />
       </div>
     </div>
   );

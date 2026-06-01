@@ -6,6 +6,7 @@ import TodayTab from "@/pages/TodayTab";
 import CalendarTab from "@/pages/CalendarTab";
 import HistoryTab from "@/pages/HistoryTab";
 import Spinner from "@/components/Spinner";
+import { scheduleReminders } from "@/components/NotificationSettings";
 
 type Tab = "today" | "calendar" | "history";
 
@@ -20,19 +21,20 @@ export default function App() {
   const fetchingRef = useRef(false);
 
   useEffect(() => {
-    // Use onAuthStateChange exclusively — it fires INITIAL_SESSION on load
-    // so we don't need getSession() as a separate trigger
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setAuthLoading(false);
-
-      if (event === "SIGNED_OUT") {
-        setHabits([]);
-      }
+      if (event === "SIGNED_OUT") setHabits([]);
     });
 
-    return () => subscription.unsubscribe();
+    // Start daily reminder scheduler
+    const stopReminders = scheduleReminders();
+
+    return () => {
+      subscription.unsubscribe();
+      stopReminders?.();
+    };
   }, []);
 
   useEffect(() => {
