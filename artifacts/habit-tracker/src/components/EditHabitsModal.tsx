@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase, Habit, CATEGORY_COLORS, DEFAULT_HABITS } from "@/lib/supabase";
 
 type Props = {
@@ -42,9 +42,17 @@ export default function EditHabitsModal({ habits, onClose, onUpdate }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setLoading(true);
-    await supabase.from("habits").insert(
-      DEFAULT_HABITS.map(h => ({ ...h, user_id: user.id }))
-    );
+    // Double-check DB is truly empty before inserting
+    const { data: existing } = await supabase
+      .from("habits")
+      .select("id")
+      .eq("user_id", user.id)
+      .limit(1);
+    if (!existing || existing.length === 0) {
+      await supabase.from("habits").insert(
+        DEFAULT_HABITS.map(h => ({ ...h, user_id: user.id }))
+      );
+    }
     onUpdate();
     setLoading(false);
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, Habit, DEFAULT_HABITS } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import AuthPage from "@/pages/AuthPage";
@@ -15,14 +15,21 @@ export default function App() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [tab, setTab] = useState<Tab>("today");
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      setAuthLoading(false);
-    });
+  // Guards against concurrent seeding
+  const seedingRef = useRef(false);
+  const fetchingRef = useRef(false);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+  useEffect(() => {
+    // Use onAuthStateChange exclusively — it fires INITIAL_SESSION on load
+    // so we don't need getSession() as a separate trigger
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setAuthLoading(false);
+
+      if (event === "SIGNED_OUT") {
+        setHabits([]);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -30,27 +37,72 @@ export default function App() {
 
   useEffect(() => {
     if (user) fetchHabits();
-  }, [user]);
+  }, [user?.id]); // depend on user.id, not the whole user object, to avoid extra triggers
 
-  async function fetchHabits() {
+  async function deduplicateHabits(userId: string): Promise<void> {
     const { data } = await supabase
       .from("habits")
       .select("*")
-      .order("position", { ascending: true });
-    const fetched = data || [];
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
 
-    // Seed defaults if empty
-    if (fetched.length === 0 && user) {
-      await supabase.from("habits").insert(
-        DEFAULT_HABITS.map(h => ({ ...h, user_id: user.id }))
-      );
-      const { data: seeded } = await supabase
+    if (!data || data.length === 0) return;
+
+    // Group by label, keep the first (earliest) of each label
+    const seen = new Map<string, string>(); // label -> id to keep
+    const toDelete: string[] = [];
+
+    for (const habit of data) {
+      const key = habit.label.trim().toLowerCase();
+      if (seen.has(key)) {
+        toDelete.push(habit.id);
+      } else {
+        seen.set(key, habit.id);
+      }
+    }
+
+    if (toDelete.length > 0) {
+      await supabase.from("habits").delete().in("id", toDelete);
+    }
+  }
+
+  async function fetchHabits() {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      // Clean up any duplicates first
+      await deduplicateHabits(currentUser.id);
+
+      const { data } = await supabase
         .from("habits")
         .select("*")
+        .eq("user_id", currentUser.id)
         .order("position", { ascending: true });
-      setHabits(seeded || []);
-    } else {
-      setHabits(fetched);
+
+      const fetched = data || [];
+
+      if (fetched.length === 0 && !seedingRef.current) {
+        seedingRef.current = true;
+        await supabase.from("habits").insert(
+          DEFAULT_HABITS.map(h => ({ ...h, user_id: currentUser.id }))
+        );
+        seedingRef.current = false;
+
+        const { data: seeded } = await supabase
+          .from("habits")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("position", { ascending: true });
+        setHabits(seeded || []);
+      } else {
+        setHabits(fetched);
+      }
+    } finally {
+      fetchingRef.current = false;
     }
   }
 
@@ -82,7 +134,6 @@ export default function App() {
         minHeight: "100vh",
         position: "relative",
       }}>
-        {/* Main content */}
         {tab === "today" && <TodayTab habits={habits} onHabitsUpdate={fetchHabits} />}
         {tab === "calendar" && <CalendarTab habits={habits} />}
         {tab === "history" && <HistoryTab habits={habits} />}
