@@ -1,0 +1,151 @@
+Build a habit tracker web app using React + Vite with Supabase for authentication and database. No UI libraries — pure CSS with inline styles or CSS modules. Google Fonts via @import.
+
+---
+
+**TECH STACK**
+- React + Vite (frontend)
+- Supabase (auth + database)
+- Install: `@supabase/supabase-js`
+- Create a `supabaseClient.js` file using `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `.env`
+
+---
+
+**AUTHENTICATION**
+- First screen shown to logged-out users is a clean auth page matching the dark theme
+- "THIS NEW MONTH" heading in Bebas Neue at the top
+- Two options: **Sign in with Google** (OAuth) and **Sign in / Register with Email & Password**
+- Email flow: single form that handles both register and login — if email doesn't exist, create account; if it does, log in
+- After login, go straight to the app
+- Small "Sign out" option accessible from the settings gear icon inside the app
+- Store session via Supabase's built-in session persistence
+
+---
+
+**SUPABASE DATABASE TABLES**
+
+Create these tables in Supabase:
+
+`habits` table:
+- `id` uuid primary key default uuid_generate_v4()
+- `user_id` uuid references auth.users
+- `label` text
+- `emoji` text
+- `category` text
+- `position` integer
+- `created_at` timestamp default now()
+
+`daily_logs` table:
+- `id` uuid primary key default uuid_generate_v4()
+- `user_id` uuid references auth.users
+- `date` date (YYYY-MM-DD)
+- `habit_id` uuid references habits(id)
+- `done` boolean default false
+- `created_at` timestamp default now()
+
+Enable Row Level Security on both tables. Each user can only read and write their own rows. Policy: `auth.uid() = user_id`
+
+---
+
+**DESIGN (match exactly)**
+- Background: `#0a0a0a`
+- Fonts: `DM Mono` (body), `Bebas Neue` (headings) — import from Google Fonts
+- Text: `#e8e8e0` primary, `#555` muted, `#444` subtle
+- Borders: `#1a1a1a` and `#111`
+- Category colors: health `#4ade80`, trading `#60a5fa`, discipline `#f87171`, lifestyle `#fbbf24`, mind `#c084fc`
+- Progress bar: gradient `#f0f0e8`→`#888`, turns `#4ade80`→`#22d3ee` at 100%
+- Checked habits get strikethrough + muted color + bounce animation on toggle
+- Show "✦ Perfect day — locked in" when all habits are done
+
+---
+
+**THREE TABS: Today · Calendar · History**
+
+---
+
+**TODAY TAB**
+- Greeting at top based on time: Good morning / afternoon / evening
+- "THIS NEW MONTH" in Bebas Neue, current month + date below
+- Progress bar: X/N habits done, fills as you check off
+- Habit list rows — each row has: colored check circle (filled with category color when done), emoji icon, label, category dot on the right
+- Tapping a row toggles checked state, updates `daily_logs` in Supabase immediately
+- ⚙️ gear icon button in the header opens the Edit Habits modal
+- Category color legend at the bottom
+
+---
+
+**EDIT HABITS MODAL**
+- Opens as a slide-up panel or centered modal
+- Lists all current habits with an ✕ delete button on each
+- Add new habit form: text input for name, emoji text input, dropdown to pick category (health / trading / discipline / lifestyle / mind)
+- Changes save to Supabase `habits` table immediately
+- When a habit is deleted, keep its `daily_logs` rows so historical stats don't break — just remove from the habits table
+- Default habits to insert on first login (check if user has zero habits, then seed):
+  - 👟 "1 or 2 pairs" — lifestyle
+  - 📐 "1 pattern/model" — trading
+  - 🏋️ "Frequent gym session" — health
+  - 🚫 "No carbonated drinks" — health
+  - 🔒 "No sex" — discipline
+  - 🛡️ "No womanizing" — discipline
+  - 🍃 "No alcohol" — health
+  - 📊 "Fixed Risk to Reward" — trading
+  - 📖 "2 chapters from any book" — mind
+  - 💧 "Water before & after sleep" — health
+  - 🌿 "Evening nature walk" — mind
+
+---
+
+**CALENDAR TAB**
+- Month grid, 7 columns Mon–Sun
+- ← → arrows to navigate between months — go back as far as data exists, no year limit
+- Month + year label updates as you navigate e.g. "June 2026"
+- Each day cell fills brighter based on % of habits completed that day: empty = `#111`, partial = dim white scaled by %, full = `#4ade80`
+- Perfect days show a ✦ star inside the cell
+- Today has a white border highlight
+- Future days are dimmed and not clickable
+- Clicking any past day opens a Day Detail Panel:
+  - Date at the top
+  - Every habit listed with ✓ (green) or ✗ (red) showing done vs missed
+  - Completion percentage for that day
+  - Close button to dismiss
+
+---
+
+**HISTORY TAB**
+- Year selector at the top with ← → arrows to go back and forward by year
+- Year heatmap — 52-week grid (GitHub-style), each cell = one day
+  - Colors: no data = `#111`, low = dim white, high = bright white, perfect = `#4ade80`
+  - Tapping a cell shows a tooltip: date + X/Y habits done
+- Monthly breakdown below the heatmap — 12 vertical bars (Jan–Dec) showing average daily completion % per month, colored with the category accent palette cycling through
+- All-time stats section at the bottom:
+  - Total perfect days ever
+  - Longest streak (consecutive days with at least 1 habit done)
+  - Best streak (consecutive perfect days)
+  - Most completed habit of all time (with its emoji)
+  - Total habits completed (raw count)
+  - First day ever tracked
+
+---
+
+**DATA FLOW**
+- On login, fetch user's habits from Supabase `habits` table ordered by `position`
+- On Today tab load, fetch `daily_logs` for today's date for this user
+- On toggle, upsert a row in `daily_logs` with `done: true/false`
+- On Calendar tab, fetch all `daily_logs` for the displayed month
+- On History tab, fetch all `daily_logs` for the selected year
+- All queries filtered by `user_id = auth.uid()`
+- Show a subtle loading spinner (just a pulsing dot, dark theme) while fetching
+
+---
+
+**CROSS-DEVICE**
+- Supabase session is persisted automatically via localStorage
+- On any device, logging in with the same account shows identical data
+- No extra sync logic needed — Supabase handles it
+
+---
+
+**GENERAL**
+- Single-page app, tab switching is just React state, no router needed
+- Mobile-first layout, max-width 480px centered on desktop
+- All interactions feel instant — optimistic UI updates (update state immediately, then sync to Supabase in background)
+- Premium, fast, clean — matches the dark monospace aesthetic throughout including the auth screen
