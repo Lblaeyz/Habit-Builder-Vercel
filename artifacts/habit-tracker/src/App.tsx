@@ -6,7 +6,7 @@ import TodayTab from "@/pages/TodayTab";
 import CalendarTab from "@/pages/CalendarTab";
 import HistoryTab from "@/pages/HistoryTab";
 import Spinner from "@/components/Spinner";
-import { scheduleReminders } from "@/components/NotificationSettings";
+import { scheduleReminders } from "@/lib/notifications";
 
 type Tab = "today" | "calendar" | "history";
 
@@ -87,11 +87,16 @@ export default function App() {
 
       const fetched = data || [];
 
-      if (fetched.length === 0 && !seedingRef.current) {
+      // Only seed defaults once ever per user — never re-seed after deliberate deletion
+      const seedKey = `tnm_seeded_${currentUser.id}`;
+      const alreadySeeded = localStorage.getItem(seedKey) === "true";
+
+      if (fetched.length === 0 && !alreadySeeded && !seedingRef.current) {
         seedingRef.current = true;
         await supabase.from("habits").insert(
           DEFAULT_HABITS.map(h => ({ ...h, user_id: currentUser.id }))
         );
+        localStorage.setItem(seedKey, "true");
         seedingRef.current = false;
 
         const { data: seeded } = await supabase

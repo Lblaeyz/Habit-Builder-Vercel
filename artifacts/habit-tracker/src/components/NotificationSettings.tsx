@@ -1,36 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { playAlarmChime } from "@/lib/notifications";
 
 const STORAGE_KEY = "tnm_reminder_time";
 const ENABLED_KEY = "tnm_reminder_enabled";
-
-export function scheduleReminders() {
-  if (typeof window === "undefined" || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const enabled = localStorage.getItem(ENABLED_KEY) === "true";
-  const time = localStorage.getItem(STORAGE_KEY) || "20:00";
-  if (!enabled) return;
-
-  const [h, m] = time.split(":").map(Number);
-
-  function checkAndNotify() {
-    const now = new Date();
-    if (now.getHours() === h && now.getMinutes() === m) {
-      new Notification("This New Month", {
-        body: "Time to check off your habits for today 🌿",
-        icon: "/favicon.png",
-        tag: "daily-reminder", // prevents duplicates
-      });
-    }
-  }
-
-  // Check every minute
-  const interval = setInterval(checkAndNotify, 60000);
-  // Also check immediately in case we just enabled it
-  checkAndNotify();
-
-  return () => clearInterval(interval);
-}
 
 export default function NotificationSettings() {
   const [enabled, setEnabled] = useState(() => localStorage.getItem(ENABLED_KEY) === "true");
@@ -42,9 +14,7 @@ export default function NotificationSettings() {
 
   async function handleToggle() {
     if (!("Notification" in window)) return;
-
     if (!enabled) {
-      // Requesting permission
       if (permission !== "granted") {
         const result = await Notification.requestPermission();
         setPermission(result);
@@ -52,6 +22,7 @@ export default function NotificationSettings() {
       }
       setEnabled(true);
       localStorage.setItem(ENABLED_KEY, "true");
+      playAlarmChime();
     } else {
       setEnabled(false);
       localStorage.setItem(ENABLED_KEY, "false");
@@ -61,6 +32,7 @@ export default function NotificationSettings() {
   function saveTime() {
     localStorage.setItem(STORAGE_KEY, time);
     setSaved(true);
+    playAlarmChime();
     setTimeout(() => setSaved(false), 1500);
   }
 
@@ -74,14 +46,21 @@ export default function NotificationSettings() {
 
       {permission === "denied" ? (
         <p style={{ color: "#444", fontSize: "12px" }}>
-          Notifications blocked by browser. Enable them in your browser settings.
+          Notifications blocked by browser. Enable them in your browser settings to use reminders.
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ color: enabled ? "#e8e8e0" : "#555", fontSize: "13px" }}>
-              {enabled ? "🔔 Reminders on" : "🔕 Reminders off"}
-            </span>
+            <div>
+              <span style={{ color: enabled ? "#e8e8e0" : "#555", fontSize: "13px" }}>
+                {enabled ? "🔔 Alarm on" : "🔕 Alarm off"}
+              </span>
+              {enabled && (
+                <p style={{ color: "#444", fontSize: "11px", marginTop: "2px" }}>
+                  Chime + notification at {time}
+                </p>
+              )}
+            </div>
             <button
               onClick={handleToggle}
               style={{
@@ -93,6 +72,7 @@ export default function NotificationSettings() {
                 fontSize: "11px",
                 letterSpacing: "1px",
                 cursor: "pointer",
+                flexShrink: 0,
               }}
             >
               {enabled ? "Turn off" : "Turn on"}
@@ -131,9 +111,15 @@ export default function NotificationSettings() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {saved ? "✓ Saved" : "Set time"}
+                {saved ? "✓ Set" : "Set time"}
               </button>
             </div>
+          )}
+
+          {enabled && (
+            <p style={{ color: "#333", fontSize: "11px" }}>
+              Keep the app open in a tab for the alarm to fire.
+            </p>
           )}
         </div>
       )}
